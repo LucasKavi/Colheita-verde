@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Colheita verde</title> 
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+  body { overflow: hidden; background: white; }
+
+  canvas { display: none; background: #eee; }
+
+  /* MENU INICIAL */
+  #menu {
+    position: absolute; inset: 0;
+    display: flex; justify-content: center; align-items: center;
+    background: black;
+    z-index: 10;
+  }
+
+  #menuSplit {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+  }
+
+  .side {
+    flex: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  #leftSide { background: linear-gradient(to right, #ff4d4d 0%, #ff0000 100%); }
+  #rightSide { background: linear-gradient(to left, #4d79ff 0%, #0066ff 100%); }
+
+  #lightning {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 100%;
+    background: repeating-linear-gradient(to bottom, yellow 0 10px, transparent 10px 20px);
+    clip-path: polygon(50% 0%, 60% 10%, 40% 20%, 55% 30%, 45% 40%, 60% 50%, 50% 60%, 65% 70%, 35% 80%, 50% 90%, 50% 100%);
+    z-index: 5;
+  }
+
+  #playButton {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 25px 60px;
+    font-size: 32px;
+    font-weight: bold;
+    color: white;
+    border: none;
+    border-radius: 15px;
+    background: linear-gradient(45deg, #ffcc00, #ff6600);
+    cursor: pointer;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+    z-index: 10;
+    transition: all 0.3s ease;
+  }
+  #playButton:hover {
+    transform: translate(-50%, -50%) scale(1.1);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+
+  .character-slot {
+    width: 180px;
+    height: 360px;
+    border: 3px dashed rgba(255,255,255,0.5);
+    border-radius: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .character-slot img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px;
+  }
+
+  #restartButton {
+    position: fixed;
+    top: 80%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 20px 50px;
+    font-size: 28px;
+    border-radius: 10px;
+    border: none;
+    background: #4caf50;
+    color: white;
+    display: none;
+    cursor: pointer;
+    z-index: 40;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+  }
+
+  #fadeOverlay {
+    position: fixed; inset: 0;
+    background: black;
+    display: none;
+    z-index: 20;
+  }
+
+  #giroflexOverlay {
+    position: fixed; inset: 0;
+    display: none;
+    z-index: 25;
+    pointer-events: none;
+  }
+
+  .giroflex {
+    position: absolute; inset: 0;
+    background: red; opacity: 0.5;
+    animation: giroflex 0.15s infinite alternate;
+  }
+  .giroflex.blue { background: blue; animation-delay: 0.075s; }
+
+  @keyframes giroflex {
+    0% { opacity: 0.1; }
+    100% { opacity: 0.7; }
+  }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <div id="menuSplit">
+
+    <!-- LADO ESQUERDO - LULA -->
+    <div id="leftSide" class="side">
+      <div class="character-slot">
+        <img src="https://i.scdn.co/image/ab67616d00001e020f01d859ee83839626cb902d">
+      </div>
+    </div>
+
+    <div id="lightning"></div>
+
+    <!-- LADO DIREITO - BOLSONARO -->
+    <div id="rightSide" class="side">
+      <div class="character-slot">
+        <img src="https://ogimg.infoglobo.com.br/in/23373510-4c3-067/FT1086A/7645319_BSBBrasiliaBrasil19-08-2015PAPlenario-mantem-na-pauta-PEC-que-reduz-mai.jpg">
+      </div>
+    </div>
+
+    <button id="playButton">JOGAR</button>
+  </div>
+</div>
+
+<button id="restartButton">REINICIAR</button>
+<div id="fadeOverlay"></div>
+<div id="giroflexOverlay">
+  <div class="giroflex red"></div>
+  <div class="giroflex blue"></div>
+</div>
+<canvas id="game"></canvas>
+
+<audio id="musica" loop>
+  <source src="musica.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+// === CONFIGURAÇÕES BÁSICAS ===
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const fadeOverlay = document.getElementById("fadeOverlay");
+const giroflexOverlay = document.getElementById("giroflexOverlay");
+const restartBtn = document.getElementById("restartButton");
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
+
+function createVideo(src, loop=false){
+  const v = document.createElement("video");
+  v.src = src; v.loop = loop; v.muted = true; v.preload = "auto";
+  return v;
+}
+
+// === PERSONAGENS ===
+const videoIdle     = createVideo("personagem_parado.mp4", true);
+const videoWalk     = createVideo("personagem_andando.mp4", true);
+const videoWalkBack = createVideo("personagem_andando_voltando.mp4", true);
+const videoJump     = createVideo("personagem_pulando.mp4");
+const videoJumpBack = createVideo("personagem_pula_voltando.mp4", true);
+const videoMoio     = createVideo("moio.mp4");
+const videoShoot    = createVideo("personagem_atirando.mp4", true);
+let currentVideo = videoIdle;
+
+// Verdinha
+const verdinhaImg = new Image();
+verdinhaImg.src = "verdinha.png";
+
+// Jogador
+const player = { x:0, y:0, width:180, height:360, speed:4, vx:0, vy:0, jumping:false, aiming:false };
+let worldX = 0, score = 0, roadOffset = 0;
+
+// Pássaros
+const birds = [];
+for(let i=0;i<5;i++){
+  birds.push({ x:Math.random()*canvas.width, y:50+Math.random()*100, speed:1+Math.random()*2, size:20+Math.random()*20, wing:0, wingDir:1 });
+}
+
+// Verdinha
+const verdinhas = [];
+for(let i=0;i<30;i++){
+  verdinhas.push({ x:1000+i*600+Math.random()*400, y:canvas.height-280, width:90, height:90, collected:false });
+}
+
+// Placa
+const placaWidth = 380, placaHeight=60, placaHeightTotal=90, placaY=placaHeight;
+let placaX = canvas.width + 300;
+
+// Teclas
+const keys = {};
+document.addEventListener("keydown", e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(e.key==="Shift"){ player.aiming=true; currentVideo=videoShoot; videoShoot.play(); }
+  if(e.key===" " && !player.jumping){ player.vy=-20; player.jumping=true; currentVideo = keys["a"] ? videoJumpBack : videoJump; currentVideo.currentTime=0; currentVideo.play();}
+});
+document.addEventListener("keyup", e=>{
+  keys[e.key.toLowerCase()]=false;
+  if(e.key==="Shift"){ player.aiming=false; currentVideo=videoIdle; }
+});
+
+// === LOOP PRINCIPAL ===
+let loopId;
+function update(){
+  if(keys["d"]){ player.vx=player.speed; if(!player.jumping&&!player.aiming) currentVideo=videoWalk; }
+  else if(keys["a"]){ player.vx=-player.speed; if(!player.jumping&&!player.aiming) currentVideo=videoWalkBack; }
+  else{ player.vx=0; if(!player.jumping&&!player.aiming) currentVideo=videoIdle; }
+
+  player.vy+=1.2; player.y+=player.vy;
+  const ground=canvas.height-200;
+  if(player.y>ground){ player.y=ground; player.vy=0; player.jumping=false; }
+
+  if(player.vx!==0){ worldX-=player.vx; placaX-=player.vx; }
+
+  birds.forEach(bird=>{
+    bird.x+=bird.speed; bird.wing+=bird.wingDir*0.2;
+    if(bird.wing>1||bird.wing<-1) bird.wingDir*=-1;
+    if(bird.x-bird.size>canvas.width) bird.x=-bird.size;
+  });
+
+  verdinhas.forEach(v=>{
+    v.x-=player.vx;
+    if(!v.collected && player.x<v.x+v.width && player.x+player.width>v.x && player.y-player.height<v.y+v.height && player.y>v.y){
+      v.collected=true; score++;
+      if(score===20) triggerGiroflex();
+    }
+  });
+
+  if(placaX+placaWidth<0) placaX=canvas.width+300;
+}
+
+function drawBackground(){
+  ctx.fillStyle="white"; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  ctx.strokeStyle="#444"; ctx.lineWidth=3;
+  birds.forEach(bird=>{
+    ctx.beginPath();
+    ctx.moveTo(bird.x,bird.y);
+    ctx.lineTo(bird.x+bird.size/2,bird.y-bird.size/2+Math.sin(bird.wing*3)*10);
+    ctx.lineTo(bird.x+bird.size,bird.y);
+    ctx.stroke();
+  });
+
+  ctx.fillStyle="#2b2b2b"; ctx.fillRect(0,canvas.height-200,canvas.width,200);
+
+  roadOffset+=player.vx*1.5;
+  ctx.strokeStyle="#FFD000"; ctx.lineWidth=8;
+  ctx.setLineDash([60,40]);
+  ctx.lineDashOffset=roadOffset;
+  ctx.beginPath(); ctx.moveTo(0,canvas.height-100); ctx.lineTo(canvas.width,canvas.height-100); ctx.stroke();
+  ctx.setLineDash([]);
+
+  verdinhas.forEach(v=>{ if(!v.collected) ctx.drawImage(verdinhaImg,v.x,v.y,v.width,v.height); });
+
+  if(placaX+placaWidth>0 && placaX<canvas.width){
+    ctx.save();
+    ctx.fillStyle="#444"; ctx.fillRect(placaX+placaWidth/2-4,0,8,placaHeightTotal);
+    ctx.fillStyle="#0A8A0A"; ctx.fillRect(placaX,placaY,placaWidth,placaHeight);
+    ctx.strokeStyle="#888"; ctx.lineWidth=5; ctx.strokeRect(placaX,placaY,placaWidth,placaHeight);
+    ctx.fillStyle="white"; ctx.font="24px Arial"; ctx.textAlign="center";
+    ctx.fillText("São Miguel Paulista — 10 km", placaX+placaWidth/2, placaY+placaHeight/2);
+    ctx.restore();
+  }
+}
+
+function drawScore(){
+  ctx.save();
+  ctx.fillStyle="#0A8A0A";
+  ctx.font="28px Arial";
+  ctx.fillText("_\\|/_  Verdinha: "+score, canvas.width-300,40);
+  ctx.restore();
+}
+
+function drawPlayer(){
+  if(currentVideo.readyState>=2) ctx.drawImage(currentVideo,player.x,player.y-player.height,player.width,player.height);
+}
+
+function showMoio(){
+  canvas.style.display="none";
+  fadeOverlay.style.display="block";
+
+  videoMoio.style.position="fixed";
+  videoMoio.style.left="50%";
+  videoMoio.style.top="50%";
+  videoMoio.style.transform="translate(-50%,-50%)";
+  videoMoio.style.width="400px";
+  videoMoio.style.zIndex="35";
+
+  document.body.appendChild(videoMoio);
+  videoMoio.play();
+
+  restartBtn.style.display="block";
+}
+
+function triggerGiroflex(){
+  giroflexOverlay.style.display="block";
+  let flashes=6;
+  const interval=setInterval(()=>{
+    flashes--; if(flashes<=0){ clearInterval(interval); giroflexOverlay.style.display="none"; showMoio(); }
+  },150);
+}
+
+restartBtn.addEventListener("click",()=>{
+  cancelAnimationFrame(loopId);
+  score=0;
+  verdinhas.forEach(v=>v.collected=false);
+  placaX=canvas.width+300;
+  roadOffset=0;
+  player.speed=4; player.vx=0; player.vy=0; player.jumping=false; player.aiming=false;
+  player.x=canvas.width*0.3; player.y=canvas.height-200;
+  videoMoio.pause(); videoMoio.currentTime=0;
+  if(videoMoio.parentNode) videoMoio.parentNode.removeChild(videoMoio);
+  restartBtn.style.display="none"; fadeOverlay.style.display="none"; canvas.style.display="block";
+  videoIdle.currentTime=0; videoIdle.play();
+  gameLoop();
+});
+
+document.getElementById("playButton").addEventListener("click",()=>{
+  document.getElementById("menu").style.display="none";
+  canvas.style.display="block";
+  player.x=canvas.width*0.3; player.y=canvas.height-200;
+  videoIdle.play(); videoWalk.play(); videoWalkBack.play();
+  document.getElementById("musica").play().catch(()=>{});
+  gameLoop();
+});
+
+function gameLoop(){
+  update(); drawBackground(); drawPlayer(); drawScore();
+  loopId=requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>
